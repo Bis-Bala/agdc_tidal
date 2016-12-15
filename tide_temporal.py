@@ -85,7 +85,7 @@ def main(epoch, lon_range, lat_range, year_range, tide_post, per, season, debug)
             print ("running task for epoch " + str(acq_min) + " TO " + str(acq_max) + " on percentile " + str(per
                    ) + " tide post " + tide_post + " for lon/lat range " + lon_range + lat_range + " epoch " + str(epoch
                    ) + " for season " + season)
-
+        
         td_info.tidal_task(acq_min, acq_max)
 
 
@@ -114,6 +114,10 @@ class MyTide():
 
     def get_epochs(self):
         for dt in rrule(YEARLY, interval=self.epoch, dtstart=self.start_epoch, until=self.end_epoch):
+
+            if dt.date() >= self.end_epoch:
+               print ("medoid calculation finished and data is available in MY_DATA dictionary ")
+               return 
             acq_min = dt.date()
             acq_max = acq_min + relativedelta(years=self.epoch, days=-1)
             acq_min = max(self.start_epoch, acq_min)
@@ -251,7 +255,8 @@ class MyTide():
         return nbar_low, nbar_high 
 
     def tidal_task(self, acq_min, acq_max):
-        # gather latest datasets as per product names 
+        #  gather latest datasets as per product names 
+           
         ds_low, ds_high = self.build_my_dataset(acq_min, acq_max)
         # calculate medoid
         # For a slice of 1000:1000 for entire time seried do like  
