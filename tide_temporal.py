@@ -180,11 +180,20 @@ class MyTide():
     def build_my_dataset(self, acq_min, acq_max):
         
         nbar_data = None 
+        dt5 = "2011-12-01"
         dt7 = "2003-03-01"
         dt8 = "2013-04-01"
         for i, st in enumerate(self.products):
             prod = None        
             print (" doing for sensor",  st )
+            if st == 'ls5_nbar_albers' and acq_max > datetime.strptime(dt5, "%Y-%m-%d").date() and  \
+                  acq_min > datetime.strptime(dt5, "%Y-%m-%d").date():
+                print ("LS5 post 2011 Dec data is not exist")
+                continue
+            elif st == 'ls5_nbar_albers' and acq_max > datetime.strptime(dt5, "%Y-%m-%d").date() and \
+                  acq_min < datetime.strptime(dt5, "%Y-%m-%d").date():
+                acq_max = datetime.strptime(dt5, "%Y-%m-%d").date()
+                print (" epoch end date is reset for LS5 2011/12/01")
             if st == 'ls7_nbar_albers' and acq_max > datetime.strptime(dt7, "%Y-%m-%d").date() and  \
                   acq_min > datetime.strptime(dt7, "%Y-%m-%d").date():
                 print ("LS7 post 2003 March data is not included")
