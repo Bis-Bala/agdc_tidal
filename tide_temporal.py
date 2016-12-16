@@ -270,10 +270,16 @@ class MyTide():
             print ("medoid calculation finished and data is available in MY_DATA dictionary ", 
                    str(datetime.now().time()))      
         key = ''
-        key = str(acq_min) + "_" + str(acq_max) + "_LOW"
+        if self.season.upper() != 'DUMMY':
+            key = str(acq_min) + "_" + str(acq_max) + "_" + self.season.upper() + "_LOW"
+        else:
+            key = str(acq_min) + "_" + str(acq_max) + "_LOW"
         MY_DATA[key] = copy.deepcopy(med_low)
         key = ''
-        key = str(acq_min) + "_" + str(acq_max) + "_HIGH" 
+        if self.season.upper() != 'DUMMY':
+            key = str(acq_min) + "_" + str(acq_max) + "_" + self.season.upper() + "_HIGH"
+        else:
+            key = str(acq_min) + "_" + str(acq_max) + "_HIGH" 
         MY_DATA[key] = copy.deepcopy(med_high)
         return
 
