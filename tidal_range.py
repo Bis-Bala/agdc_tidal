@@ -306,7 +306,7 @@ class MyTide():
         # calculate medoid
         # For a slice of 1000:1000 for entire time seried do like  
         # smallds = ds_high.isel(x=slice(None, None, 4), y=slice(None, None, 4)) 
-        if self.stats.upper() != "medoid":
+        if self.stats.upper() != "MEDOID":
             print ("creating median image for " + self.stats + " for lower range " + str(datetime.now().time()))      
             med_low = self.compute_stats(ds_low)
             print ("creating median image for " + self.stats + " for higher range " + str(datetime.now().time()))      
