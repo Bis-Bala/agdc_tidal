@@ -1,7 +1,8 @@
 from __future__ import absolute_import, division, print_function
 
 import math
-from datacube.utils import check_intersect
+#from datacube.utils import check_intersect
+# from datacube.utils import intersects
 from datacube.api.query import Query, query_group_by
 
 BADCOUNT = 100
@@ -29,7 +30,7 @@ def list_gqa_filtered_cells(index, gw, pix_th=None, cell_index=None, **indexers)
     if pix_th is None:
         pix_th = 1
     for dataset in observations:                                                          
-        if check_intersect(geobox.extent, dataset.extent.to_crs(gw.grid_spec.crs)):
+        if intersects(geobox.extent, dataset.extent.to_crs(gw.grid_spec.crs)):
             if get_gqa(index, dataset.id) < pix_th:                                  
                 datasets.setdefault(cell_index,{'datasets': [],
                                     'geobox': geobox})['datasets'].append(dataset)

@@ -65,9 +65,9 @@ DEFAULT_PROFILE = {
 @required_option('--year_range', 'year_range', type=str, required=True, help='2010-2017 i.e 2010-01-01 to 2017-01-01')
 @click.option('--tide_post', 'tide_post', type=str, default='',
               help='pick up tide post from epoch_tide_post_model.csv in current directory using Haversin algorithm for a closest cluster or provide from google map like (130.0123, -11.01)')
-@click.option('--per', 'per', default=10, type=int, help='10 25 50 for low tide/high tide 10/90 25/75 50/50' )
+@click.option('--per', 'per', default=10, type=int, help='10 25 50 for low tide/high tide 10/10 25/25 50/50' )
 @click.option('--season', 'season', default='dummy', type=str, help='summer winter autumn spring')
-@click.option('--stats', 'stats', default='medoid', type=click.Choice(['NDWI', 'MNDWI', 'NDBI', 'NDVI']), help='ndwi mndwi ndbi ndvi')
+@click.option('--stats', 'stats', default='MEDOID', type=click.Choice(['NDWI', 'MNDWI', 'NDBI', 'NDVI', 'MEDOID']), help='ndwi mndwi ndbi ndvi medoid')
 @click.option('--ls7fl', default=True, is_flag=True, help='To include all LS7 data set it to False')
 @click.option('--debug', default=False, is_flag=True, help='Build in debug mode to get details of tide height within time range')
 # @ui.parsed_search_expressions
@@ -133,7 +133,6 @@ class MyTide():
         a = 0.5 - cos((lat2 - lat1) * p)/2 + cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2
         return 12742 * asin(sqrt(a))
 
-
     def extract_otps_range(self, date_list):
         # open the otps lon/lat file
         tp = list()
@@ -151,12 +150,13 @@ class MyTide():
             rdlist = list()
             fname = "./epoch_tide_post_model.csv"
             try:
-                with open (fname, 'rb') as f:
+                with open (fname, 'rt') as f:
                     reader = csv.reader(f, delimiter=',')
                     for rd in reader:
-                        rdlist.append((rd[0], rd[1], rd[2], self.distance(la, ln, float(rd[1]), float(rd[0]))))
+                        rdlist.append((rd[0], rd[1], rd[2],
+                                      self.distance(la, ln, float(rd[1]), float(rd[0]))))
                 rdlist = sorted(rdlist, key=itemgetter(3))
-                print ( "Found tide post coordinates", rdlist[0] )
+                print ( "Found tide post coordinates,depth and shortest distance", rdlist[0] )
                 la = float(rdlist[0][1])
                 ln = float(rdlist[0][0])
             except IOError as e:
@@ -175,12 +175,23 @@ class MyTide():
         for tt in tides:
             tide_dict[datetime.strptime(tt.timepoint.timestamp.isoformat()[0:19], "%Y-%m-%dT%H:%M:%S")] = tt.tide_m
         tide_dict = sorted(tide_dict.items(), key=lambda x: x[1])
-        lowest = round(float(self.per)*len(tide_dict)/100)
-        date_low = tide_dict[:int(lowest)]
-        date_high = tide_dict[-int(len(tide_dict)-lowest):]
+        # lowest = round(float(self.per)*len(tide_dict)/100)
+        dr = float(tide_dict[len(tide_dict)-1][1]) - float(tide_dict[0][1])
+        lmr = float(tide_dict[0][1]) + dr*float(self.per)*0.01   # low tide max range
+        hlr = float(tide_dict[len(tide_dict)-1][1]) - dr*float(self.per)*0.01   # low tide max range
+        date_low = [x for x  in tide_dict if x[1] <= lmr]
+        date_high = [x for x  in tide_dict if x[1] > hlr] 
+        # date_high = tide_dict[-int(lowest):]
+        print ("lowest tides range and number " +  str(date_low[0][1]) + "," + str(date_low[len(date_low)-1][1])
+               + " " + str(len(date_low)))
+        print ("highest tides range and number " +  str(date_high[0][1]) + "," + str(date_high[len(date_high)-1][1])
+               + " " + str(len(date_high)))
         if self.debug:
             print ("lowest tides list ", [[datetime.strftime(date[0], "%Y-%m-%d"), date[1]]  for date in date_low])
+            print ("")
             print ("highest tides list", [[datetime.strftime(date[0], "%Y-%m-%d"), date[1]] for date in date_high])
+            print ("")
+            print ("ALL TIDES LIST", [[datetime.strftime(date[0], "%Y-%m-%d"), date[1]] for date in tide_dict])
         date_low = [dd[0] for dd in date_low]
         date_high = [dd[0] for dd in date_high]
         return date_low, date_high 
@@ -307,7 +318,7 @@ class MyTide():
             med_high = statistics.combined_var_reduction(ds_high, statistics.nanmedoid)         
         print ("calculation for " + self.stats + " finished for this epoch " + str(datetime.now().time()))      
         if (acq_max == self.end_epoch):
-            print ("medoid calculation finished and data is available in MY_DATA dictionary ", 
+            print (self.stats.upper(), " calculation finished and data is available in MY_DATA dictionary ", 
                    str(datetime.now().time()))      
         key = ''
         if self.season.upper() != 'DUMMY':
