@@ -1,0 +1,61 @@
+
+
+1. clone my repository from geoscienceaustralia in your working directory
+    
+   git clone git@github.com:Bis-Bala/agdc_tidal.git
+
+
+2. clone Damien's agdc_statistics- repository in the sane working directory to do medoid calculation
+
+   git clone git@github.com:GeoscienceAustralia/agdc_statistics.git
+
+3. copy /g/data/u46/LATEST_PIXEL/OTPS_VARIANCE/epoch_tide_post_model.csv into the working directory where notebook will run
+   tide post can also be provided through parameter option.
+
+4. do in VDI terminal
+     # Make sure agdc MODULEPATH is set correctly by doing 
+     module use /g/data/v10/public/modules/modulefiles
+     # Load python2 module and workflow works only on this environment
+     module load agdc-py2-prod/1.1.10
+     module load otps
+        
+5. Start Jupyter notebook 
+    # start it by doing this command on terminal
+    jupyter notebook
+    # open python2 in notebook  
+    import sys
+    sys.path.append('/home/547/bxb547/ga-repository/agdc_statistics')  # just check your working directory and statistics path
+
+    %run tide_temporal.py --help  # To get all the supported options debug option 
+                                  # is good to see all low high tide and date list (By default epoch 2/ percentage 10 etc..
+
+    %run python tide_temporal.py --lon_range '(130.002, 130.30205)' --lat_range '(-12.01, -12.3113)'  --year_range 2002-2007 --per 25 --debug True
+
+
+6. If run successfully, it will return a dictionary MY_DATA with it's epoch named *_LOW and *_HIGH as keys and six bands xarray medoid dataset for each key.
+
+
+Season can be used for any epoch. I excluded any LS7 data after 01/03/2003. I didn't use gqa filtering process in this application. I need API for this. I do have only cell based gqa filtering. The pqa filter bit(15871) applied for all datasets.
+
+
+  #Runnung on Jupyter notebook. Examples are in git site.
+import sys
+sys.path.append('/home/547/bxb547/ga-repository/agdc_statistics')
+LON="--lon_range '(130.802, 130.90205)'"
+LAT="--lat_range '(-12.41, -12.5113)'"
+YEAR="--year_range 2000-2016"  # requirement mandatory
+EPOCH="--epoch 5" #default epoch 2
+PER="--per 25"  #Default percentage 10
+STATS="--stats NDWI"  #Default is medoid otherwise stats as per user requirement
+DEB="--debug"   # To get detail of date/time and tide heights
+# LS7FL="--ls7fl"  To include LS7 datasets
+
+%run tidal_range.py $LON $LAT $YEAR $PER $EPOCH $STATS $DEB
+
+
+    
+
+
+
+
+
