@@ -241,6 +241,12 @@ class MyTide():
             # end_ep = acq_max + relativedelta(days=1)
             indexers = {'time':(acq_min, acq_max), 'x':(str(self.lon[0]), str(self.lon[1])), 'y':(str(self.lat[0]), str(self.lat[1]))}
             pq = self.dc.load(product=prod, fuse_func=pq_fuser, **indexers)   
+            if st == 'ls5_nbar_albers' and len(pq) == 0:
+                print ("No LS5 data found")
+                continue
+            if nbar_data is not None and st == 'ls7_nbar_albers' and len(pq) == 0:
+                print ("No LS7 data found")
+                continue
             indexers = {'time':(acq_min, acq_max), 'x':(str(self.lon[0]), str(self.lon[1])), 'y':(str(self.lat[0]), str(self.lat[1])),
                         'measurements':['blue', 'green', 'red', 'nir', 'swir1', 'swir2']}
             mask_clear = pq['pixelquality'] & 15871 == 15871
