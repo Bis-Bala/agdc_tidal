@@ -201,8 +201,12 @@ class MyTide():
         dtt7 = "1999-07-01"
         dt7 = "2003-03-01"
         dt8 = "2013-04-01"
+        ed = acq_max
+        sd = acq_min
         for i, st in enumerate(self.products):
-            prod = None        
+            prod = None
+            acq_max = ed
+            acq_min = sd       
             print (" doing for sensor",  st )
             if st == 'ls5_nbar_albers' and acq_max > datetime.strptime(dt5, "%Y-%m-%d").date() and  \
                   acq_min > datetime.strptime(dt5, "%Y-%m-%d").date():
