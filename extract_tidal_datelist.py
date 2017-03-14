@@ -136,10 +136,10 @@ class MyTide():
                 with open (fname, 'rt') as f:
                     reader = csv.reader(f, delimiter=',')
                     for rd in reader:
-                        rdlist.append((rd[0], rd[1], rd[2],
+                        rdlist.append((rd[0], rd[1],
                                       self.distance(la, ln, float(rd[1]), float(rd[0]))))
                 rdlist = sorted(rdlist, key=itemgetter(3))
-                print ( "Found tide post coordinates,depth and shortest distance", rdlist[0] )
+                print ( "Found tide post coordinates and shortest distance", rdlist[0] )
                 la = float(rdlist[0][1])
                 ln = float(rdlist[0][0])
             except IOError as e:
