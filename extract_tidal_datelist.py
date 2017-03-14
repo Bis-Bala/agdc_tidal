@@ -138,7 +138,7 @@ class MyTide():
                     for rd in reader:
                         rdlist.append((rd[0], rd[1],
                                       self.distance(la, ln, float(rd[1]), float(rd[0]))))
-                rdlist = sorted(rdlist, key=itemgetter(3))
+                rdlist = sorted(rdlist, key=itemgetter(2))
                 print ( "Found tide post coordinates and shortest distance", rdlist[0] )
                 la = float(rdlist[0][1])
                 ln = float(rdlist[0][0])
