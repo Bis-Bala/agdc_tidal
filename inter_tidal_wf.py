@@ -35,6 +35,7 @@ from datacube.api.grid_workflow import Tile
 from datacube_stats import statistics
 from math import cos, asin, sqrt
 import hdmedians as hd
+from datacube.utils import geometry
 
 logging.basicConfig()
 _log = logging.getLogger('agdc-temporal-geomedian-test')
@@ -58,8 +59,8 @@ DEFAULT_PROFILE = {
 # @ui.executor_cli_options
 # @click.command()
 @required_option('--epoch', 'epoch', default=2, type=int, help='epoch like 2 5 10')
-@required_option('--lon_range', 'lon_range', type=str, required=True, help='like (130.01, 130.052) under quote')
-@required_option('--lat_range', 'lat_range', type=str, required=True, help='like (-13.023,-13.052) under quote')
+@required_option('--lon_range', 'lon_range', type=str, default='', help='like (130.01, 130.052) under quote')
+@required_option('--lat_range', 'lat_range', type=str, default='', help='like (-13.023,-13.052) under quote')
 @required_option('--year_range', 'year_range', type=str, required=True, help='2010-2017 i.e 2010-01-01 to 2017-01-01')
 @click.option('--date_all_1', 'date_all_1', type=str, default='', 
                  help='Run first extract_tidal_datelist.py to get low date list')
@@ -69,16 +70,33 @@ DEFAULT_PROFILE = {
               help='pick up tide post from epoch_tide_post_model.csv in current directory using Haversin algorithm for a closest cluster or provide from google map like (130.0123, -11.01)')
 @click.option('--per', 'per', default=10, type=int, help='10 25 50 for low tide/high tide 10/10 25/25 50/50' )
 @click.option('--season', 'season', default='dummy', type=str, help='summer winter autumn spring')
+@click.option('--poly', 'poly', default='', type=str, help='allow polygon coordinates')
+@click.option('--crs', 'crs', default='', type=str, help='crs from the polygon file')
+@click.option('--ebb', 'ebb', default='', type=str, help='extracting composite while tide drains away from shore')
+@click.option('--flow', 'flow', default='', type=str, help='extracting composite while tide rises')
 @click.option('--ls7fl', default=True, is_flag=True, help='To include all LS7 data set it to False')
 @click.option('--debug', default=False, is_flag=True, help='Build in debug mode to get details of tide height within time range')
 # @ui.parsed_search_expressions
 # @ui.pass_index(app_name='agdc-tidal-analysis-app')
 
-def main(epoch, lon_range, lat_range, year_range, date_all_1, date_all_2, tide_post, per, season, ls7fl, debug):
+def main(epoch, lon_range, lat_range, year_range, date_all_1, date_all_2, tide_post, per, season, poly, crs, 
+         ebb, flow, ls7fl, debug):
     # dc = datacube.Datacube(app="tidal-range")
     products = ['ls5_nbar_albers', 'ls7_nbar_albers', 'ls8_nbar_albers']
+    if per == "50" and len(ebb) != 0:
+        print ("not supported for 50 percent ebb images")
+        return
+    if per == "50" and len(flow) != 0: 
+        print ("not supported for 50 percent flow images ")
+        return
+    if len(ebb) != 0 and len(flow) != 0:
+        print ("not supported for both ebb flow together")
+        return
+  
     dc=datacube.Datacube(app='tidal_temporal_test')
-    td_info = MyTide(dc, lon_range, lat_range, products, epoch, year_range, date_all_1, date_all_2, tide_post, per, season, ls7fl, debug)
+
+    td_info = MyTide(dc, lon_range, lat_range, products, epoch, year_range, date_all_1, date_all_2, tide_post,
+                     per, season, poly, crs, ebb, flow, ls7fl, debug)
     print ("Input date range " + year_range )
     for (acq_min, acq_max) in td_info.get_epochs():
         if season == "dummy":
@@ -102,20 +120,34 @@ def pq_fuser(dest, src):
 
 
 class MyTide():
-    def __init__(self, dc, lon_range, lat_range, products, epoch, year_range, date_all_1, date_all_2, tide_post, per, season, ls7fl, debug):
+    def __init__(self, dc, lon_range, lat_range, products, epoch, year_range, date_all_1, date_all_2, tide_post,
+                 per, season, poly, crs, ebb, flow, ls7fl, debug):
         self.dc = dc
-        self.lon = eval(lon_range)
-        self.lat = eval(lat_range)
+        if len(poly) > 0:
+            self.lon = ''
+            self.lat = ''
+            if len(tide_post) == 0:
+                print ("Please provide tide post parameter")
+                sys.exit()
+        else: 
+            self.lon = eval(lon_range)
+            self.lat = eval(lat_range)
         self.products = products
         self.epoch = epoch
-        self.start_epoch = datetime.strptime(year_range.split('-')[0] +"-01-01", "%Y-%m-%d").date()
-        self.end_epoch = datetime.strptime(year_range.split('-')[1]+"-01-01", "%Y-%m-%d").date()
+        #self.start_epoch = datetime.strptime(year_range.split('-')[0] +"-01-01", "%Y-%m-%d").date()
+        #self.end_epoch = datetime.strptime(year_range.split('-')[1]+"-01-01", "%Y-%m-%d").date()
+        self.start_epoch = datetime.strptime(year_range.split('_')[0], "%Y-%m-%d").date()
+        self.end_epoch = datetime.strptime(year_range.split('_')[1], "%Y-%m-%d").date()
         if len(date_all_1) > 0:
             self.date_all_1 = list(eval(date_all_1))
         self.date_all_2 = list(eval(date_all_2))
         self.tide_post = tide_post
         self.per = per
         self.season = season
+        self.poly = poly
+        self.crs = crs
+        self.ebb = ebb
+        self.flow = flow
         self.ls7fl = ls7fl
         self.debug = debug
 
@@ -136,16 +168,61 @@ class MyTide():
         a = 0.5 - cos((lat2 - lat1) * p)/2 + cos(lat1 * p) * cos(lat2 * p) * (1 - cos((lon2 - lon1) * p)) / 2
         return 12742 * asin(sqrt(a))
 
+    def init_polygon(self):
+        crs = self.crs
+        crs = geometry.CRS(crs)
+        first_geometry = {'type': 'Polygon', 'coordinates': eval(self.poly)}
+        geom = geometry.Geometry(first_geometry, crs=crs)
+        return geom
+
+    def extract_ebb_flow_tides(self, date_list):
+        tp = list()
+        tide_dict = dict()
+        ln = eval(self.tide_post)[0]
+        la = eval(self.tide_post)[1]
+        ndate_list=list()
+        mnt=timedelta(minutes=15)
+        for dt in date_list:
+            ndate_list.append(dt-mnt)
+            ndate_list.append(dt)
+            ndate_list.append(dt+mnt)
+        for dt in ndate_list:
+            tp.append(TimePoint(ln, la, dt)) 
+        tides = predict_tide(tp)
+        if len(tides) == 0:
+           print ("No tide height observed from OTPS model within lat/lon range")
+           sys.exit()
+        print ("received from predict tides ", str(datetime.now()))
+        # collect in ebb/flow list
+        for tt in tides:
+            tide_dict[datetime.strptime(tt.timepoint.timestamp.isoformat()[0:19], "%Y-%m-%dT%H:%M:%S")] = tt.tide_m
+        tide_dict = sorted(tide_dict.items(), key=lambda x: x[1])
+        tmp_lt = list()
+        for k, v in tide_dict.items():
+            tmp_lt.append([k, v])
+        if self.debug:
+            print (str(tmp_lt))
+        tmp_lt = [[tmp_lt[i+1][0].strftime("%Y-%m-%d"), 'ph'] \
+                 if tmp_lt[i][1] < tmp_lt[i+1][1] and tmp_lt[i+2][1] <  tmp_lt[i+1][1]  else \
+                 [tmp_lt[i+1][0].strftime("%Y-%m-%d"), 'pl'] if tmp_lt[i][1] > tmp_lt[i+1][1] and \
+                 tmp_lt[i+2][1] >  tmp_lt[i+1][1]  else [tmp_lt[i+1][0].strftime("%Y-%m-%d"),'f'] \
+                 if tmp_lt[i][1] < tmp_lt[i+2][1] else [tmp_lt[i+1][0].strftime("%Y-%m-%d"),'e'] \
+                 for i in range(0, len(tmp_lt), 3)]    
+        return tmp_lt     
+        
 
     def build_my_dataset(self, acq_min, acq_max):
         
         nbar_data = None 
         dt5 = "2011-12-01"
         dtt7 = "1999-07-01"
-        dt7 = "2003-03-01"
+        dt7 = "2003-05-01"
         dt8 = "2013-04-01"
+        geom = None
         ed = acq_max
         sd = acq_min
+        if len(self.poly) > 0:
+            geom = self.init_polygon()
         for i, st in enumerate(self.products):
             prod = None
             acq_max = ed
@@ -161,12 +238,12 @@ class MyTide():
                 print (" epoch end date is reset for LS5 2011/12/01")
             if st == 'ls7_nbar_albers' and self.ls7fl and acq_max > datetime.strptime(dt7, "%Y-%m-%d").date() and  \
                   acq_min > datetime.strptime(dt7, "%Y-%m-%d").date():
-                print ("LS7 post 2003 March data is not included")
+                print ("LS7 post 2003 May data is not included")
                 continue
             elif st == 'ls7_nbar_albers' and self.ls7fl and acq_max > datetime.strptime(dt7, "%Y-%m-%d").date() and \
                   acq_min < datetime.strptime(dt7, "%Y-%m-%d").date():
                 acq_max = datetime.strptime(dt7, "%Y-%m-%d").date()
-                print (" epoch end date is reset for LS7 2003/03/01")
+                print (" epoch end date is reset for LS7 2003/05/01")
             if st == 'ls7_nbar_albers' and acq_max < datetime.strptime(dtt7, "%Y-%m-%d").date() and \
                   acq_min < datetime.strptime(dtt7, "%Y-%m-%d").date():
                 continue
@@ -184,8 +261,11 @@ class MyTide():
                 prod = 'ls8_pq_albers'
             # add extra day to the maximum range to include the last day in the search
             # end_ep = acq_max + relativedelta(days=1)
-            indexers = {'time':(acq_min, acq_max), 'x':(str(self.lon[0]), str(self.lon[1])), 
-                        'y':(str(self.lat[0]), str(self.lat[1])), 'group_by':'solar_day'}
+            if geom:
+                indexers = {'time':(acq_min, acq_max), 'geopolygon': geom, 'group_by':'solar_day'}
+            else:
+                indexers = {'time':(acq_min, acq_max), 'x':(str(self.lon[0]), str(self.lon[1])), 
+                            'y':(str(self.lat[0]), str(self.lat[1])), 'group_by':'solar_day'}
             pq = self.dc.load(product=prod, fuse_func=pq_fuser, **indexers)   
             if st == 'ls5_nbar_albers' and len(pq) == 0:
                 print ("No LS5 data found")
@@ -193,7 +273,11 @@ class MyTide():
             if nbar_data is not None and st == 'ls7_nbar_albers' and len(pq) == 0:
                 print ("No LS7 data found")
                 continue
-            indexers = {'time':(acq_min, acq_max), 'x':(str(self.lon[0]), str(self.lon[1])), 'y':(str(self.lat[0]), str(self.lat[1])),
+            if geom:
+                indexers = {'time':(acq_min, acq_max), 'measurements':['blue', 'green', 'red', 'nir', 'swir1', 'swir2'],
+                            'geopolygon': geom, 'group_by':'solar_day'}
+            else:
+                indexers = {'time':(acq_min, acq_max), 'x':(str(self.lon[0]), str(self.lon[1])), 'y':(str(self.lat[0]), str(self.lat[1])),
                         'measurements':['blue', 'green', 'red', 'nir', 'swir1', 'swir2'], 'group_by':'solar_day'}
             mask_clear = pq['pixelquality'] & 15871 == 15871
             if nbar_data is not None:
@@ -215,125 +299,51 @@ class MyTide():
         # filtered out lowest and highest date range
         date_list = nbar_data.time.values.astype('M8[s]').astype('O').tolist() 
         date_all = [s.strftime("%Y-%m-%d") for s in date_list]
-        nbar_low = None
         nbar_high = None
         high_dict = dict()
-        low_dict = dict()
-        date_l = ""
         date_h = ""
-        if self.per == 50: 
-            low_match = list()
-            high_match = [i for i, item in enumerate(date_all) for x in self.date_all_2 if item in x]
-            if len(high_match) == 0:
-                print (" No dataset matches with this epoch ")
-                return None, None, None, None
-            high_all = [item for item in self.date_all_2 if item.split(',')[0] in date_all]
-            for i in high_all: 
-                high_dict[i.split(',')[0]] = i.split(',')[1]
-            high_dict = sorted(high_dict.items(), key=lambda x: x[1])
-            date_high = [x for x  in high_dict] 
-            nbar_high = nbar_data.isel(time=high_match)
-            if self.debug:
-                #dt_lst=nbar_high.time.values.astype('M8[D]').astype('O').tolist()  
-                print ("50 perc tides list ")
-                # print ( [datetime.strftime(date, "%Y-%m-%d")  for date in dt_lst])
-                print (date_high)
-                print ("")
-            date_h = str(date_high[0][1]) + "," + str(date_high[len(date_high)-1][1]) + "," + str(len(date_high))
-        else:
-            low_match = [i for i, item in enumerate(date_all) for x in self.date_all_1 if item in x]
-            if len(low_match) == 0:
-                print (" No dataset matches with this epoch ")
-                return None, None, None, None
-            else:
-                nbar_low = nbar_data.isel(time=low_match)
-            high_match = [i for i, item in enumerate(date_all) for x in self.date_all_2 if item in x]
-            if len(high_match) == 0:
-                print (" No dataset matches with this epoch ")
-                return None, None, None, None
-            else:
-                nbar_high = nbar_data.isel(time=high_match)
-            high_all = [item for item in self.date_all_1 if item.split(',')[0] in date_all]
-            for i in high_all: 
-                low_dict[i.split(',')[0]] = i.split(',')[1]
-            low_dict = sorted(low_dict.items(), key=lambda x: x[1])
-            high_all = [item for item in self.date_all_2 if item.split(',')[0] in date_all]
-            for i in high_all: 
-                high_dict[i.split(',')[0]] = i.split(',')[1]
-            high_dict = sorted(high_dict.items(), key=lambda x: x[1])
-            date_low = [x for x  in low_dict]
-            date_high = [x for x  in high_dict] 
-            if self.debug:
-                dt_lst=nbar_low.time.values.astype('M8[D]').astype('O').tolist()  
-                print ("lowest tides list ")
-                print ([datetime.strftime(date, "%Y-%m-%d") for date in dt_lst])
-                dt_lst=nbar_high.time.values.astype('M8[D]').astype('O').tolist()  
-                print ("highest tides list")
-                print ([datetime.strftime(date, "%Y-%m-%d") for date in dt_lst])
-                print ("lowest tides range and number " +  str(date_low[0][1]) + "," + str(date_low[len(date_low)-1][1])
-                + " " + str(len(date_low)))
-                print ("highest tides range and number " +  str(date_high[0][1]) + "," + str(date_high[len(date_high)-1][1])
-                + " " + str(len(date_high)))
- 
-                print ("")
-            date_l = str(date_low[0][1]) + "," + str(date_low[len(date_low)-1][1]) + "," + str(len(date_low))
-            date_h = str(date_high[0][1]) + "," + str(date_high[len(date_high)-1][1]) + "," + str(len(date_high))
+        high_match = [i for i, item in enumerate(date_all) for x in self.date_all_2 if item in x]
+        if len(high_match) == 0:
+            print (" No dataset matches with this epoch ")
+            return None, None
+        high_all = [item for item in self.date_all_2 if item.split(',')[0] in date_all]
+        for i in high_all: 
+            high_dict[i.split(',')[0]] = i.split(',')[1]
+        high_dict = sorted(high_dict.items(), key=lambda x: x[1])
+        date_high = [x for x  in high_dict] 
+        nbar_high = nbar_data.isel(time=high_match)
+        if self.debug:
+            #dt_lst=nbar_high.time.values.astype('M8[D]').astype('O').tolist()  
+            print ("tide list ")
+            # print ( [datetime.strftime(date, "%Y-%m-%d")  for date in dt_lst])
+            print (date_high)
+            print ("")
+        date_h = str(date_high[0][1]) + "," + str(date_high[len(date_high)-1][1]) + "," + str(len(date_high))
         print (" loaded nbar data " +  str(datetime.now().time())) 
         
-        return nbar_low, nbar_high, date_l, date_h
+        return nbar_high, date_h
 
     def tidal_task(self, acq_min, acq_max):
         #  gather latest datasets as per product names 
            
-        ds_low, ds_high, date_l, date_h = self.build_my_dataset(acq_min, acq_max)
+        ds_high, date_h = self.build_my_dataset(acq_min, acq_max)
         if ds_high is None:
-           return
-        if ds_low is None and ds_high is None:
            return
         # calculate medoid
         # For a slice of 1000:1000 for entire time seried do like  
         # smallds = ds_high.isel(x=slice(None, None, 4), y=slice(None, None, 4)) 
         key = ''
-        if self.per == 50:
-            print ("creating GEOMEDIAN for 50 percent range " + str(datetime.now().time()))      
-            med_high = statistics.combined_var_reduction(ds_high, hd.nangeomedian)         
-        else:
-            print ("creating GEOMEDIAN for lower range " + str(datetime.now().time()))      
-            med_low = statistics.combined_var_reduction(ds_low, hd.nangeomedian)         
-            print ("creating GEOMEDIAN for higher range " + str(datetime.now().time()))      
-            med_high = statistics.combined_var_reduction(ds_high, hd.nangeomedian)         
-        key = ''
-        if self.season.upper() != 'DUMMY':
-            key = "GEO_" + str(acq_min) + "_" + str(acq_max) + "_" + self.season.upper() + "_LOW"
-            if self.per == 50:
-                key = "GEO_" + str(acq_min) + "_" + str(acq_max) + "_" + self.season.upper() + "_MIDDLE"
-        else:
-            key = "GEO_" + str(acq_min) + "_" + str(acq_max) + "_LOW"
-            if self.per == 50:
-                key = "GEO_" + str(acq_min) + "_" + str(acq_max) + "_MIDDLE"
+        print ("creating GEOMEDIAN for epoch " + str(acq_min) + "_" + str(acq_max) + str(datetime.now().time()))      
+        med_high = statistics.combined_var_reduction(ds_high, hd.nangeomedian)         
+        key = str(acq_min) + "_" + str(acq_max) 
         
-        if self.per == 50:
-            MY_GEO[key] = copy.deepcopy(med_high)
-            MY_EPOCH[key] = copy.deepcopy(date_h)
-            if acq_max == self.end_epoch:
-                print (" calculation finished for 50 percentage MY_GEO and MY_EPOCH dictionaries " +  
-                       str(datetime.now().time()))
-            return
-            
-        MY_GEO[key] = copy.deepcopy(med_low)
-        MY_EPOCH[key] = copy.deepcopy(date_l)
-        key = ''
-        if self.season.upper() != 'DUMMY':
-            key = "GEO_" + str(acq_min) + "_" + str(acq_max) + "_" + self.season.upper() + "_HIGH"
-        else:
-            key = "GEO_" + str(acq_min) + "_" + str(acq_max) + "_HIGH" 
         MY_GEO[key] = copy.deepcopy(med_high)
         MY_EPOCH[key] = copy.deepcopy(date_h)
-        if (acq_max == self.end_epoch):
-            print (" calculation finished and data is available in MY_GEO and MY_EPOCH dictionaries " +  
-                   str(datetime.now().time()))      
+        if acq_max == self.end_epoch:
+            print (" calculation finished for MY_GEO and MY_EPOCH dictionaries " +  
+                   str(datetime.now().time()))
         return
-
+            
 
 if __name__ == '__main__':
     '''
